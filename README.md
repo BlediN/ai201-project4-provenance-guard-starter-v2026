@@ -218,14 +218,31 @@ the AI label. That's the trade I chose: missed AI text over accused writers.
 
 | Label | Score range | The exact text a reader sees |
 |---|---|---|
-| high-confidence human |  |  |
-| unsure |  |  |
-| high-confidence AI |  |  |
+| high-confidence human | 0.00 – 0.35 | We think this was probably written by a person. Our automated check found the patterns we usually see in human writing. |
+| unsure | above 0.35, below 0.75 | We can't tell whether this was written by a person or with help from AI. That happens often with clear, simple writing, and it is not a finding against the writer. We aren't marking this as AI. |
+| high-confidence AI | 0.75 – 1.00 | We think this was probably written with help from AI. This is an automated estimate, not proof, and it can be wrong. If you wrote this yourself, you can ask for a person to review it. |
+
+The ranges come from `scoring.label_ranges()` and leave no gap: a score of
+exactly 0.35 is human, and exactly 0.75 is AI (`scoring.py::score_to_label`).
+All three were reached through `POST /submit`: see Sample Run.
 
 **Why I worded the "unsure" one this way:**
-<!-- It's the hardest of the three. It has to admit uncertainty without
-     sounding like an accusation, because the person reading it may well have
-     written every word themselves. -->
+On my calibration set, "unsure" is where the plain writer, both formal
+writers, and lightly edited AI all land. So the person most likely to read it
+is someone who wrote every word themselves. That's why it:
+
+- **says what we don't know, not what they did.** "We can't tell", not "this
+  may be AI".
+- **names the reason it happens to innocent writers:** clear, simple writing.
+  That's signal one's blind spot from Milestone 1, said in plain words. A
+  writer who gets this label learns it's about *style*, not about them.
+- **states plainly that it isn't an accusation.** "Not a finding against the
+  writer" and "We aren't marking this as AI", so a teacher or an editor
+  reading it over the writer's shoulder can't treat it as a soft "AI".
+
+The AI label is worded with the same caution: "probably", "an automated
+estimate, not proof", and it points straight at the appeal. A writer who is
+wrongly accused should learn from the label itself that a person can review it.
 
 
 
@@ -243,11 +260,7 @@ the AI label. That's the trade I chose: missed AI text over accused writers.
      two off the response, so leaving them out costs you next unit's
      diagnostics. -->
 
-*Milestone 3 version: one signal. `guess`, `confidence` and `label` are
-placeholders, and `style_score` is `null` until signal two exists. This gets
-replaced with the full run in Milestone 5.*
-
-Signal one on its own first, from the terminal, before wiring it in
+*From Milestone 3: signal one on its own first*, from the terminal, before wiring it in
 (`python detector.py "<text>"`):
 
 | Text | Sure it's… | Perplexity | `model_signal` |
@@ -274,25 +287,71 @@ $ curl -X POST http://127.0.0.1:5000/ping \
 }
 ```
 
-A submission:
+*The full service: one submission per label.*
+
+High-confidence AI:
 
 ```bash
 $ curl -X POST http://127.0.0.1:5000/submit \
   -H "Content-Type: application/json" \
-  -d '{"text": "Remote work has changed a lot about how teams operate. Honestly, the biggest shift for us was meetings: we went from three a day to maybe one, and nobody misses the rest. That said, it is important to keep communication clear, because small misunderstandings can grow quickly when people are not in the same room.", "creator_id": "bledar"}'
+  -d '{"text": "The implementation of the proposed framework requires careful consideration of several key factors. First, it is important to note that the system must be able to handle a wide variety of different inputs. Additionally, the overall performance of the solution depends on a number of important variables.", "creator_id": "bledar"}'
 ```
 
 ```json
 {
-  "confidence": 0.5908,
-  "content_id": "29555484-df49-4444-82a9-79afb750bdcc",
-  "guess": "pending",
-  "label": "Not labelled yet: labels arrive in Milestone 5.",
-  "model_score": 0.5908,
+  "confidence": 0.875,
+  "content_id": "37c1fca0-512d-4c93-a06e-215d6eaf79e8",
+  "guess": "ai",
+  "label": "We think this was probably written with help from AI. This is an automated estimate, not proof, and it can be wrong. If you wrote this yourself, you can ask for a person to review it.",
+  "model_score": 0.8864,
   "status": "decided",
-  "style_score": null
+  "style_score": 0.8674
 }
 ```
+
+High-confidence human:
+
+```bash
+$ curl -X POST http://127.0.0.1:5000/submit \
+  -H "Content-Type: application/json" \
+  -d '{"text": "Honestly the bus was late again, third time this week, so I ended up jogging the last bit in my work shoes - terrible idea. Got there sweaty, missed half the standup, and my manager just gave me that look. Whatever. Tomorrow I am biking, rain or not.", "creator_id": "bledar"}'
+```
+
+```json
+{
+  "confidence": 0.3245,
+  "content_id": "021d5071-6a08-4141-bfb5-c88d27788a67",
+  "guess": "human",
+  "label": "We think this was probably written by a person. Our automated check found the patterns we usually see in human writing.",
+  "model_score": 0.3328,
+  "status": "decided",
+  "style_score": 0.0266
+}
+```
+
+Unsure (the plain writer from Milestone 1, whose signals split):
+
+```bash
+$ curl -X POST http://127.0.0.1:5000/submit \
+  -H "Content-Type: application/json" \
+  -d '{"text": "I moved to this city two years ago. At first it was hard. I did not know many people and my English was not good. Now I have a job and some friends. I still miss my family, but I call them every week. I think I made a good choice.", "creator_id": "bledar"}'
+```
+
+```json
+{
+  "confidence": 0.5815,
+  "content_id": "0abf5703-6dcb-43a7-bcea-c4b8ef5494a7",
+  "guess": "unsure",
+  "label": "We can't tell whether this was written by a person or with help from AI. That happens often with clear, simple writing, and it is not a finding against the writer. We aren't marking this as AI.",
+  "model_score": 0.862,
+  "status": "decided",
+  "style_score": 0.5303
+}
+```
+
+The human example only just makes it: 0.3245 against a cutoff of 0.35. The
+human label is reachable, but it's a narrow band, and that's worth watching
+in unit 8.
 
 Bad input is refused before the model runs, and nothing is logged:
 
@@ -311,45 +370,99 @@ $ curl -X POST http://127.0.0.1:5000/submit \
 
 **An appeal**
 
-*Not built yet: `/appeal` is Milestone 5.*
+Against the real `content_id` of the AI-labelled submission above:
 
 ```bash
 $ curl -X POST http://127.0.0.1:5000/appeal \
   -H "Content-Type: application/json" \
-  -d '{"content_id": "...", "reasoning": "..."}'
-```
-
-```json
-
-```
-
-**What the log shows afterwards**
-
-```bash
-$ curl "http://127.0.0.1:5000/log?limit=3"
+  -d '{"content_id": "37c1fca0-512d-4c93-a06e-215d6eaf79e8", "reasoning": "I wrote this myself for a project proposal. It sounds formal because it is a formal document."}'
 ```
 
 ```json
 {
-  "count": 1,
+  "content_id": "37c1fca0-512d-4c93-a06e-215d6eaf79e8",
+  "message": "Thanks. Your appeal has been received and a person will review this decision. Nothing else is needed from you right now.",
+  "status": "under_review"
+}
+```
+
+A made-up `content_id` is refused, so a typo can't look like a success:
+
+```bash
+$ curl -X POST http://127.0.0.1:5000/appeal \
+  -H "Content-Type: application/json" \
+  -d '{"content_id": "not-a-real-id", "reasoning": "typo test"}'
+```
+
+```json
+{
+  "error": "not_found",
+  "message": "No submission with that content_id."
+}
+```
+
+A missing `reasoning` returns `400 invalid_input`.
+
+**What the log shows afterwards**
+
+```bash
+$ curl "http://127.0.0.1:5000/log?limit=4"
+```
+
+```json
+{
+  "count": 4,
   "entries": [
     {
-      "combined_score": 0.5908,
-      "content_id": "29555484-df49-4444-82a9-79afb750bdcc",
+      "combined_score": 0.875,
+      "content_id": "37c1fca0-512d-4c93-a06e-215d6eaf79e8",
       "creator_id": "bledar",
-      "guess": "pending",
-      "label": "Not labelled yet: labels arrive in Milestone 5.",
-      "model_score": 0.5908,
+      "guess": "ai",
+      "label": "We think this was probably written with help from AI. This is an automated estimate, not proof, and it can be wrong. If you wrote this yourself, you can ask for a person to review it.",
+      "model_score": 0.8864,
       "status": "decided",
-      "style_score": null,
-      "timestamp": "2026-11-04T04:13:07+00:00"
+      "style_score": 0.8674,
+      "timestamp": "2026-11-04T04:23:55+00:00"
+    },
+    {
+      "combined_score": 0.3245,
+      "content_id": "021d5071-6a08-4141-bfb5-c88d27788a67",
+      "creator_id": "bledar",
+      "guess": "human",
+      "label": "We think this was probably written by a person. Our automated check found the patterns we usually see in human writing.",
+      "model_score": 0.3328,
+      "status": "decided",
+      "style_score": 0.0266,
+      "timestamp": "2026-11-04T04:23:55+00:00"
+    },
+    {
+      "combined_score": 0.5815,
+      "content_id": "0abf5703-6dcb-43a7-bcea-c4b8ef5494a7",
+      "creator_id": "bledar",
+      "guess": "unsure",
+      "label": "We can't tell whether this was written by a person or with help from AI. That happens often with clear, simple writing, and it is not a finding against the writer. We aren't marking this as AI.",
+      "model_score": 0.862,
+      "status": "decided",
+      "style_score": 0.5303,
+      "timestamp": "2026-11-04T04:23:56+00:00"
+    },
+    {
+      "content_id": "37c1fca0-512d-4c93-a06e-215d6eaf79e8",
+      "creator_id": "bledar",
+      "event": "appeal",
+      "reasoning": "I wrote this myself for a project proposal. It sounds formal because it is a formal document.",
+      "status": "under_review",
+      "timestamp": "2026-11-04T04:23:56+00:00"
     }
   ]
 }
 ```
 
-The submission landed in `logs/audit.jsonl` with the same `content_id` the
-response returned, and the rejected empty submission left no entry.
+The log is append-only. The original AI decision for `37c1fca0…` is still
+there unchanged, and the appeal sits after it with the writer's reasoning and
+the new status `under_review`. Anyone reading it later can see what was
+decided, that it was challenged, and in what order. Rejected requests (empty
+text, unknown `content_id`) left no entry.
 
 ---
 

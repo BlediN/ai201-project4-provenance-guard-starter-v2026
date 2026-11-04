@@ -42,62 +42,97 @@ Two things worth knowing before you pick numbers:
   a **miss**.
 
 ---
-## 1.
 
-<!-- Your criterion. It must name a number. -->
+### What I measured before writing these
 
+Before setting any number I ran signal one (`python detector.py "<text>"`) on
+four inputs. Signal two isn't built yet.
 
+| Input | Who wrote it | Perplexity | `model_signal` |
+|---|---|---|---|
+| Built-in sample ("The implementation of the proposed framework…") | AI-style | 12.5 | 0.886 |
+| Short essay on AI ("…it is important to note…") | AI-style | 16.7 | 0.830 |
+| Plain, second-language style ("I moved to this city two years ago…") | Human | 14.3 | **0.862** |
+| Casual ("Honestly the bus was late again…") | Human | 67.9 | 0.341 |
+
+Plain human writing scores *between* the two AI texts. Signal one alone can't
+tell them apart, so criteria 1 and 2 are not going to pass by accident.
+
+---
+## 1. False positives on human writing
+
+Of **10 human-written pieces** (at least 4 of them in plain, simple style:
+short sentences and common words), **at most 1** is labelled high-confidence
+AI, and that has to hold in **each of the three trials**.
 
 **Why this target:**
-
-
+On a writing site, a wrong accusation costs the writer far more than a missed
+detection costs the site. That person may have no way to prove they wrote it.
+1 in 10 is strict but not zero, because perfect detection isn't possible. I
+require 4 plain pieces because that's where signal one fails (0.862 above). A
+test set of only casual, quirky writing would make this target easy to hit and
+meaningless.
 
 ---
 
-## 2.
+## 2. Score spread between clearly-AI and clearly-human text
 
-<!-- Your criterion. -->
-
-
+The average combined score of **5 clearly AI-generated texts** is **at least
+0.25 higher** than the average combined score of **5 clearly human texts**,
+in each of the three trials. The human set must include at least 2 plain-style
+pieces.
 
 **Why this target:**
-
-
+If the two groups score close together, the thresholds just pick a point in
+noise, and every label is close to a coin flip. A gap of 0.25 is enough to fit
+an "unsure" band between them. Signal one alone gives about 0.52 between AI
+text and casual human text, but about 0 between AI text and plain human text.
+So hitting 0.25 on a mixed human set depends on signal two pulling its weight.
 
 ---
 
-## 3.
+## 3. All three labels are reachable, and AI text still gets caught
 
-<!-- Your criterion. -->
-
-
+On a set of **9 texts** (3 clearly AI, 3 clearly human, 3 that I judge
+borderline), **each of the three labels appears at least once**, and **at
+least 2 of the 3 clearly AI texts** are labelled high-confidence AI, in each
+of the three trials.
 
 **Why this target:**
-
-
+A label that can never appear is dead code dressed up as a feature. The config
+notes warn that a weighted average can trap scores in the middle. The second
+half stops me "solving" criterion 1 by widening the unsure band until nothing
+is ever called AI. That would pass criterion 1 and make the service useless.
 
 ---
 
-## 4.
+## 4. The appeal path always works
 
-<!-- Your criterion. -->
-
-
+For **5 out of 5** appeals against real `content_id`s, `POST /appeal` returns
+`200` with `status: "under_review"`, **and** a matching appeal entry, with the
+writer's reasoning, appears in `GET /log`. For **3 out of 3** appeals with a
+made-up `content_id`, it returns `404` and never `200` or `500`.
 
 **Why this target:**
-
-
+The appeal is the only thing between a wrong accusation and nothing at all, so
+it has to work every time. Anything less than 5/5 means some writers are
+silently ignored. The 404 half matters because a typo that "succeeds" looks
+fine to the writer while nothing was recorded.
 
 ---
 
-## 5.
+## 5. Bad input is refused cleanly
 
-<!-- Your criterion. -->
-
-
+For **4 malformed requests** (`text` empty, `text` missing, `text` set to
+`null`, and `text` of about 250,000 characters), **4 out of 4** return a `4xx`
+status with a JSON `error` field, **0** return `500`, and each answers in
+**under 2 seconds**.
 
 **Why this target:**
-
+A crash on malformed input is one of the most common real failures, and the
+unit 8 attack set will send exactly these. The 2-second limit proves bad input
+is rejected *before* the model runs. Feeding the model 250,000 characters
+would be slow and pointless, and it's an easy way to tie up the service.
 
 
 ---

@@ -39,6 +39,31 @@
 <!-- The path a submission takes, from arriving to the label a reader sees.
      Six or seven steps — this is the trace you wrote in Milestone 1. -->
 
+1. **It arrives.** A writer sends `POST /submit` with `{"text": "...", "creator_id": "..."}`.
+   Flask hands the JSON body to `app.py::submit`.
+2. **The route checks it.** Missing, empty, or oversized `text` (or a missing
+   `creator_id`) is turned away with a `400` before any model runs. Valid input
+   gets a fresh `content_id` (a uuid), so this exact submission can be found
+   again later, which is what an appeal needs.
+3. **Signal one reads it** (`detector.model_signal`). A local gpt2 model
+   measures how predictable the text is (perplexity) and squashes that onto a
+   0–1 `model_score`, where higher means more AI-like.
+4. **Signal two measures its shape** (`stylometry.style_signal`). It looks at
+   how much sentence lengths vary, how much vocabulary repeats, and how
+   punctuation is used. That gives a 0–1 `style_score` that points the same way.
+5. **The scores are combined** (`scoring.combine_signals`). A weighted average
+   of the two (weights in `config.py`) gives one combined score, returned as
+   `confidence`: 0 means confidently human, 1 means confidently AI.
+6. **The score becomes a label** (`scoring.score_to_label`). The thresholds in
+   `config.py` sort it into high-confidence human, unsure, or high-confidence
+   AI. The result is a short `guess` plus a plain-English `label` written for
+   the person reading it.
+7. **It's logged and returned.** `audit.log_decision` writes both signal scores,
+   the combined score, the label, and status `decided` to `logs/audit.jsonl`,
+   and the response goes back to the caller. If the writer disagrees,
+   `POST /appeal` with that `content_id` moves the item to `under_review` and
+   logs the writer's reasoning.
+
 
 
 ---
@@ -53,19 +78,48 @@
 
 ### Signal one — the model signal
 
-**What it measures:**
+**What it measures:** How predictable the text is to a language model.
+`detector.py` runs gpt2 locally and computes perplexity, the model's average
+surprise at each next word. Low perplexity (easy to predict) maps to a high
+`model_score`.
 
-**Why that might differ between human and AI writing:**
+**Why that might differ between human and AI writing:** An AI model writes by
+repeatedly choosing a likely next word, so its output is exactly the kind of
+text a model finds easy to predict. Human writing wanders more: unusual word
+choices, specific details, abrupt turns. All of that surprises the model.
 
-**What it can't see:**
+**What it can't see:** Who actually wrote the text. Predictable is not the same
+as machine-written. Plain writing, with common words in short ordinary
+sentences, scores as AI-like even when a person wrote every word: a
+second-language writer sticking to words they're sure of, a younger writer,
+anyone writing simply on purpose. I checked this. A plain paragraph I wrote
+("I moved to this city two years ago. At first it was hard...") got perplexity
+14.3 and a `model_score` of **0.862**. The reverse also fools it: AI text
+dressed up with rare or ornate vocabulary surprises gpt2 and scores as
+*human*. It also only reads the first 400 tokens.
 
 ### Signal two — the style signal
 
-**What it measures:**
+**What it measures:** The text's shape as text, without understanding a word:
+how much sentence lengths vary (the spread relative to the mean), how much
+vocabulary repeats (type-token ratio), and how much varied punctuation there is
+(commas, semicolons, dashes, and so on).
 
-**Why that might differ between human and AI writing:**
+**Why that might differ between human and AI writing:** Generated prose tends
+toward even, mid-length sentences, a narrower band of vocabulary, and
+tidy, uniform punctuation, because "most likely next word" produces the average
+case. Human writing is lumpier: a three-word sentence next to a forty-word
+one, a run of dashes, a repeated pet word.
 
-**What it can't see:**
+**What it can't see:** What the text means. Anything that changes the shape
+without changing the content moves this score: adding typos, splitting long
+sentences into short ones, sprinkling in semicolons, pasting in a quotation.
+Those are cheap, deliberate edits that can push AI text toward "human". It
+also has almost nothing to measure on very short text: a single sentence has
+no length spread at all. Type-token ratio drops as text gets longer, so length
+alone can look like a signal. And a writer whose own style is naturally
+even and repetitive gets pushed toward "AI" for the same reason signal one
+accuses plain writers.
 
 ### The combining rule
 

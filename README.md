@@ -175,17 +175,75 @@ accuses plain writers.
      two off the response, so leaving them out costs you next unit's
      diagnostics. -->
 
+*Milestone 3 version: one signal. `guess`, `confidence` and `label` are
+placeholders, and `style_score` is `null` until signal two exists. This gets
+replaced with the full run in Milestone 5.*
+
+Signal one on its own first, from the terminal, before wiring it in
+(`python detector.py "<text>"`):
+
+| Text | Sure it's… | Perplexity | `model_signal` |
+|---|---|---|---|
+| "The implementation of the proposed framework requires careful consideration…" | AI | 12.5 | 0.8864 |
+| "Honestly the bus was late again, third time this week…" | Human | 67.9 | 0.3412 |
+| "Remote work has changed a lot about how teams operate. Honestly, the biggest shift…" (AI, lightly edited) | In between | 35.8 | 0.5908 |
+
+The three land in the order I expected, with the edited text in the middle.
+
+The control route answers:
+
 ```bash
-$ curl -X POST http://127.0.0.1:5000/submit \
+$ curl -X POST http://127.0.0.1:5000/ping \
   -H "Content-Type: application/json" \
-  -d '{"text": "...", "creator_id": "..."}'
+  -d '{"message": "hello"}'
 ```
 
 ```json
+{
+  "ok": true,
+  "service": "provenance-guard",
+  "you_sent": "hello"
+}
+```
 
+A submission:
+
+```bash
+$ curl -X POST http://127.0.0.1:5000/submit \
+  -H "Content-Type: application/json" \
+  -d '{"text": "Remote work has changed a lot about how teams operate. Honestly, the biggest shift for us was meetings: we went from three a day to maybe one, and nobody misses the rest. That said, it is important to keep communication clear, because small misunderstandings can grow quickly when people are not in the same room.", "creator_id": "bledar"}'
+```
+
+```json
+{
+  "confidence": 0.5908,
+  "content_id": "29555484-df49-4444-82a9-79afb750bdcc",
+  "guess": "pending",
+  "label": "Not labelled yet: labels arrive in Milestone 5.",
+  "model_score": 0.5908,
+  "status": "decided",
+  "style_score": null
+}
+```
+
+Bad input is refused before the model runs, and nothing is logged:
+
+```bash
+$ curl -X POST http://127.0.0.1:5000/submit \
+  -H "Content-Type: application/json" \
+  -d '{"text": "", "creator_id": "bledar"}'
+```
+
+```json
+{
+  "error": "invalid_input",
+  "message": "'text' is required and must be a non-empty string."
+}
 ```
 
 **An appeal**
+
+*Not built yet: `/appeal` is Milestone 5.*
 
 ```bash
 $ curl -X POST http://127.0.0.1:5000/appeal \
@@ -204,8 +262,26 @@ $ curl "http://127.0.0.1:5000/log?limit=3"
 ```
 
 ```json
-
+{
+  "count": 1,
+  "entries": [
+    {
+      "combined_score": 0.5908,
+      "content_id": "29555484-df49-4444-82a9-79afb750bdcc",
+      "creator_id": "bledar",
+      "guess": "pending",
+      "label": "Not labelled yet: labels arrive in Milestone 5.",
+      "model_score": 0.5908,
+      "status": "decided",
+      "style_score": null,
+      "timestamp": "2026-11-04T04:13:07+00:00"
+    }
+  ]
+}
 ```
+
+The submission landed in `logs/audit.jsonl` with the same `content_id` the
+response returned, and the rejected empty submission left no entry.
 
 ---
 

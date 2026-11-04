@@ -468,17 +468,42 @@ text, unknown `content_id`) left no entry.
 
 ## How I Used AI
 
-**Moment 1**
+I built this with Claude Code (an AI coding assistant) working in the repo,
+running commands and editing files at my request, milestone by milestone.
 
-- *What I asked for:*
-- *What came back:*
-- *What I changed:*
+**Moment 1: building the style signal**
 
-**Moment 2**
+- *What I asked for:* Build signal two in `stylometry.py` from the three
+  stubbed measures (sentence spread, type-token ratio, punctuation density)
+  and combine them into one 0–1 score.
+- *What came back:* The three measures, plus a calibration script that
+  printed each raw measure for nine texts: three AI, casual human, plain
+  human, two formal human (Thoreau, Darwin), and two lightly edited AI. The
+  numbers showed type-token ratio pointing the wrong way. Thoreau scored the
+  *most* AI-like (0.675) and edited AI the most human (0.933). The plain human
+  writer looked AI-like on all three measures.
+- *What I changed:* Type-token ratio stays computed but gets **zero weight**,
+  and a fourth measure, **mean word length**, replaces it. That measure
+  separates plain human writing (3.4 letters per word) from AI prose
+  (5.4–5.75), which is exactly where signal one fails. I kept the decision
+  only because the measurements backed it up: the stub's three measures,
+  taken on trust, would have accused the plain writer.
 
-- *What I asked for:*
-- *What came back:*
-- *What I changed:*
+**Moment 2: the false-positive trace**
+
+- *What I asked for:* Fill in the Milestone 1 trace: follow a real writer
+  whose work gets called AI through the service.
+- *What came back:* A trace of a second-language writer with a *measured*
+  model score (0.862, from running `detector.py` on a plain paragraph) but an
+  *estimated* style score of 0.70, because signal two didn't exist yet. With
+  the starter settings that combined to about 0.78, labelled AI.
+- *What I changed:* Once signal two was built, I replaced the estimate with the
+  measured value (0.530) and noted the update in `MILESTONE1.md`, rather than
+  leaving a guessed number in the write-up. That measured split (0.862
+  against 0.530) then became the case the combining rule was designed around:
+  style weighted 0.6, a pull toward 0.5 when the signals disagree by more than
+  0.3, and the AI threshold raised to 0.75. Without that, she would still have
+  scored 0.696 and been accused.
 
 <!-- ═══════════════════════ UNIT 8 — THE TEST ═══════════════════════ -->
 

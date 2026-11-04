@@ -51,12 +51,22 @@ def combine_signals(model_score: float, style_score: float) -> float:
 
     The weights in config.py are placeholders. Change them, or ignore them and
     write a different rule.
+
+    My rule:
+      1. Weighted average, 0.4 model / 0.6 style. Style counts for more
+         because signal one's blind spot (plain writers) is the exact false
+         positive this service must avoid.
+      2. If the signals are more than DISAGREEMENT_GAP apart, pull the result
+         DISAGREEMENT_PULL of the way toward 0.5. A split is uncertainty, so
+         it should land in "unsure" rather than in either confident label.
     """
-    # TODO: replace this
-    return (
+    score = (
         config.WEIGHT_MODEL_SIGNAL * model_score
         + config.WEIGHT_STYLE_SIGNAL * style_score
     )
+    if abs(model_score - style_score) > config.DISAGREEMENT_GAP:
+        score += (0.5 - score) * config.DISAGREEMENT_PULL
+    return round(min(max(score, 0.0), 1.0), 4)
 
 
 def score_to_label(score: float) -> tuple[str, str]:

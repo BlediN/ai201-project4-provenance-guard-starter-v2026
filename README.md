@@ -100,10 +100,22 @@ dressed up with rare or ornate vocabulary surprises gpt2 and scores as
 
 ### Signal two — the style signal
 
-**What it measures:** The text's shape as text, without understanding a word:
-how much sentence lengths vary (the spread relative to the mean), how much
-vocabulary repeats (type-token ratio), and how much varied punctuation there is
-(commas, semicolons, dashes, and so on).
+**What it measures:** The text's shape as text, without understanding a word.
+It uses three scored measures (`stylometry.py::style_signal`):
+
+| Measure | What it is | AI end → 1.0 | Human end → 0.0 | Weight |
+|---|---|---|---|---|
+| Sentence spread | stdev ÷ mean of words per sentence | 0.20 | 0.80 | 0.4 |
+| Mean word length | average letters per word | 5.6 | 4.0 | 0.4 |
+| Punctuation | commas, semicolons, colons, dashes, brackets, quotes, ! and ? per word (full stops left out) | 0.02 | 0.12 | 0.2 |
+| Type-token ratio | unique ÷ total words, over a 50-word moving window | — | — | **0** |
+
+Each measure is placed on a straight line between its AI end and its human
+end, clamped to 0–1, then weighted. Type-token ratio is computed and printed
+but gets no weight. On my calibration set it rated Thoreau (human) the *most*
+AI-like text (0.675) and lightly edited AI the most human (0.933), so it was
+adding noise. Mean word length replaced it: it's the measure that separates
+plain human writing (3.4 letters per word) from AI prose (5.4–5.75).
 
 **Why that might differ between human and AI writing:** Generated prose tends
 toward even, mid-length sentences, a narrower band of vocabulary, and
@@ -126,16 +138,72 @@ accuses plain writers.
 <!-- Write the rule in words, then give the numbers. What happens when the two
      signals disagree? -->
 
-**The rule:**
+**The rule:** Take a weighted average of the two signals, giving the style
+signal more weight. If the two signals disagree by a wide margin, pull the
+result halfway toward 0.5, because two methods contradicting each other is
+uncertainty, and uncertainty belongs in "unsure", not in a confident label.
+Style gets more weight because signal one's known blind spot (plain writers)
+is exactly the false positive this service must not make.
 
-**The numbers:**
+**The numbers** (all in `config.py`):
+
+| Setting | Value |
+|---|---|
+| `WEIGHT_MODEL_SIGNAL` | 0.4 |
+| `WEIGHT_STYLE_SIGNAL` | 0.6 |
+| `DISAGREEMENT_GAP` (when the pull applies) | signals more than 0.3 apart |
+| `DISAGREEMENT_PULL` | halfway (0.5) toward 0.5 |
+| `HUMAN_THRESHOLD` | 0.35 |
+| `AI_THRESHOLD` | 0.75, raised from the starter's 0.65 |
+
+```
+combined = 0.4 × model_score + 0.6 × style_score
+if |model_score − style_score| > 0.3:
+    combined = combined + (0.5 − combined) × 0.5
+```
 
 **Where it lives:** `scoring.py::combine_signals`
 
-<!-- ⚠️ The grader checks your code against that line. If your rule lives
-     somewhere else, say where. -->
+**The four calibration inputs, plus extras.** These are both signals printed
+separately, then combined:
+
+| Input | `model_score` | `style_score` | Combined | Lands in |
+|---|---|---|---|---|
+| Clearly AI ("The implementation of the proposed framework…") | 0.886 | 0.867 | 0.875 | AI |
+| Clearly AI (essay on AI) | 0.830 | 0.845 | 0.839 | AI |
+| Clearly AI (healthy habits) | 0.879 | 0.970 | 0.934 | AI |
+| Clearly human, casual ("Honestly the bus was late again…") | 0.341 | 0.049 | 0.166 | human |
+| **Plain human** ("I moved to this city two years ago…") | **0.862** | **0.530** | **0.582** | unsure |
+| Formal human (Thoreau, *Walden*) | 0.650 | 0.404 | 0.502 | unsure |
+| Formal human (Darwin, *Origin of Species*) | 0.705 | 0.626 | 0.658 | unsure |
+| Lightly edited AI (remote work) | 0.591 | 0.469 | 0.518 | unsure |
+| Lightly edited AI (healthy habits) | 0.617 | 0.607 | 0.611 | unsure |
+
+Where they agree: clean AI text (both high) and casual human text (both low).
+Where they disagree: the plain human writer, and Thoreau to a lesser degree.
+
+What surprised me: formal human writing is *not* safely human here. Signal one
+gave Thoreau 0.650 and Darwin 0.705, because old, measured prose is still
+fairly predictable to gpt2. Thoreau stays out of the AI label because his
+words are short (3.7 letters) and his punctuation is heavy, which signal two
+reads as human. Darwin stays out only because of the raised threshold: 0.658
+would have been labelled AI at the starter's 0.65.
 
 **A case where my two signals split, and what my rule does with it:**
+The plain human paragraph ("I moved to this city two years ago. At first it
+was hard…"). Signal one says **0.862**, as AI-like as real AI text, because
+short common words are easy for gpt2 to predict. Signal two says **0.530**:
+its sentences are even (AI-like), but its words average 3.4 letters, the
+shortest of any text I tested, which no AI sample came close to. The gap
+is 0.332, over 0.3, so the disagreement rule applies. A plain weighted average
+would give 0.664, and the pull brings it to **0.582**, comfortably inside
+"unsure". Under the starter settings (0.5 / 0.5, AI at 0.65) this writer would
+have scored 0.696 and been labelled **high-confidence AI**, which is the
+false positive from Milestone 1.
+
+**What it costs:** both lightly edited AI texts (0.518 and 0.611) land in
+"unsure" rather than AI. A few human touches are enough to get AI text out of
+the AI label. That's the trade I chose: missed AI text over accused writers.
 
 
 

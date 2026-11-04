@@ -28,6 +28,15 @@ every word of it.
 5. **Label:** 0.78 is above the starter `AI_THRESHOLD` of 0.65, so she gets
    **high-confidence AI**.
 
+> **Update after Milestone 4:** measured, not estimated. With signal two
+> built, her paragraph scores `style_score` **0.530**. Her even sentences
+> still read as AI, but her short words (3.4 letters on average) read as
+> human. Under the starter settings that still combines to 0.696, which is
+> above 0.65, so she would have been accused. Under my rule (0.4 / 0.6
+> weights, a pull toward 0.5 when the signals disagree by more than 0.3, AI
+> threshold 0.75) she scores **0.582** and lands in **unsure**. See the README,
+> "The combining rule".
+
 **What the label says to her:** With a blunt label such as "This text was
 written by AI," she reads an accusation she has no way to disprove, about
 writing she worked hard on in a language that isn't her first.

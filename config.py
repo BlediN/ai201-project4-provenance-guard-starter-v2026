@@ -58,8 +58,14 @@ MAX_TEXT_CHARS = 10_000
 # down BEFORE you code it, and to put the numbers in your README. Whatever you
 # decide, it goes here.
 
-WEIGHT_MODEL_SIGNAL = 0.5
-WEIGHT_STYLE_SIGNAL = 0.5
+WEIGHT_MODEL_SIGNAL = 0.4
+WEIGHT_STYLE_SIGNAL = 0.6
+
+# When the two signals are further apart than this, they contradict each
+# other, and the combined score is pulled this fraction of the way toward 0.5.
+# Two methods disagreeing is uncertainty, not evidence.
+DISAGREEMENT_GAP = 0.3
+DISAGREEMENT_PULL = 0.5
 
 
 # ─── Thresholds (Milestone 5) ────────────────────────────────────────────────
@@ -76,7 +82,9 @@ WEIGHT_STYLE_SIGNAL = 0.5
 # that decide who pays for it.
 
 HUMAN_THRESHOLD = 0.35
-AI_THRESHOLD = 0.65
+# Raised from 0.65. Plain human writing combined to 0.58–0.66 on my
+# calibration set; clean AI text combined to 0.84 and up.
+AI_THRESHOLD = 0.75
 
 # ⚠️ One thing that catches people out in Milestone 5. A weighted average can
 # only land between its two inputs — so while `style_signal` is still the stub

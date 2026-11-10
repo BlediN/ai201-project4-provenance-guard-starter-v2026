@@ -717,17 +717,540 @@ obedience to the rubric is the reason.
 
 | Criterion | Target | Run 1 | Run 2 | Run 3 | Verdict |
 |---|---|---|---|---|---|
-| 1.  |  |  |  |  |  |
-| 2.  |  |  |  |  |  |
-| 3.  |  |  |  |  |  |
-| 4.  |  |  |  |  |  |
-| 5.  |  |  |  |  |  |
+| 1. My own writing flagged as AI | ≤ 1 of 10 | 1/10 | 1/10 | 1/10 | MET |
+| 2. Score spread, clearly AI vs clearly human | AI mean − human mean ≥ 0.25 | 0.208 | 0.208 | 0.208 | MISSED |
+| 3. All three labels reachable, AI still caught | 3 of 3 labels, ≥ 2 of 3 AI labelled AI | 2/3 labels, 2/3 AI | 2/3 labels, 2/3 AI | 2/3 labels, 2/3 AI | MISSED |
+| 4. Appeal always works | 5/5 real appeals → `under_review` + log entry; 3/3 fake ids → 404 | 5/5, 3/3 | 5/5, 3/3 | 5/5, 3/3 | MET |
+| 5. Bad input refused cleanly | 4/4 → 4xx with JSON `error`, 0 × 500, each < 2 s | 4/4, max 0.011 s | 4/4, max 0.012 s | 4/4, max 0.012 s | MET |
 
-**Real output from one trial**, pasted as text, naming the file and function
-that produced it:
+Command: `python run_eval.py --label before`, saved to
+`results/run_2026-11-09_2215_before.md` (produced by `run_eval.py::main`;
+service `app.py::submit`, scoring `scoring.py::combine_signals` and
+`scoring.py::score_to_label`). Criterion 4 runs through
+`run_eval.py::run_appeals`, which I added: it submits a text, appeals the
+`content_id` that comes back via `app.py::appeal`, and checks `GET /log` for
+an appeal entry with that id and that reasoning. Every request is timed
+(`elapsed_s`) for criterion 5.
+
+**All three trials gave identical scores.** gpt2 scoring is deterministic
+(no sampling, same weights, same input), so "three trials" here checks that
+nothing drifts rather than averaging out noise.
+
+- **Criterion 1** was met with no margin. Piece 6 ("I have been trying to manage
+  my time better this semester…") scored 0.763, just over my 0.75 AI line, in
+  all three trials. One more like it and the target fails.
+- **Criterion 2** was missed: AI mean 0.820, human mean 0.612, gap 0.208.
+- **Criterion 3** was missed on the first half: "ai" and "unsure" appear, but
+  "human" never does. None of my 10 pieces scored below 0.508, and my human
+  threshold is 0.35. The second half held: 2 of 3 AI texts were labelled AI,
+  and the third scored 0.741.
+
+**Real output from one trial (Trial 1 of each)**, pasted from
+`results/run_2026-11-09_2215_before.md`, produced by `run_eval.py::main`:
+
+*Criterion 1: own writing* (`app.py::submit`)
 
 ```json
+[
+  {
+    "status": 200,
+    "guess": "unsure",
+    "confidence": 0.5445,
+    "model_score": 0.7096,
+    "style_score": 0.4344,
+    "label": "We can't tell whether this was written by a person or with help from AI. That happens often with clear, simple writing, and it is not a finding against the writer. We aren't marking this as AI.",
+    "error": null,
+    "elapsed_s": 8.556,
+    "sent": "I woke up early today. The house was quiet. I made coffee and checked "
+  },
+  {
+    "status": 200,
+    "guess": "unsure",
+    "confidence": 0.5533,
+    "model_score": 0.812,
+    "style_score": 0.4695,
+    "label": "We can't tell whether this was written by a person or with help from AI. That happens often with clear, simple writing, and it is not a finding against the writer. We aren't marking this as AI.",
+    "error": null,
+    "elapsed_s": 0.127,
+    "sent": "I took the bus to the store. It was crowded, but I found a seat near t"
+  },
+  {
+    "status": 200,
+    "guess": "unsure",
+    "confidence": 0.5134,
+    "model_score": 0.6836,
+    "style_score": 0.4,
+    "label": "We can't tell whether this was written by a person or with help from AI. That happens often with clear, simple writing, and it is not a finding against the writer. We aren't marking this as AI.",
+    "error": null,
+    "elapsed_s": 0.143,
+    "sent": "My room was messy after a busy week. I washed my clothes and put the b"
+  },
+  {
+    "status": 200,
+    "guess": "unsure",
+    "confidence": 0.6772,
+    "model_score": 0.7149,
+    "style_score": 0.652,
+    "label": "We can't tell whether this was written by a person or with help from AI. That happens often with clear, simple writing, and it is not a finding against the writer. We aren't marking this as AI.",
+    "error": null,
+    "elapsed_s": 0.156,
+    "sent": "I cooked rice and vegetables for dinner. The meal was simple, but it t"
+  },
+  {
+    "status": 200,
+    "guess": "unsure",
+    "confidence": 0.6912,
+    "model_score": 0.8021,
+    "style_score": 0.6173,
+    "label": "We can't tell whether this was written by a person or with help from AI. That happens often with clear, simple writing, and it is not a finding against the writer. We aren't marking this as AI.",
+    "error": null,
+    "elapsed_s": 0.164,
+    "sent": "Last Saturday, I walked around the neighborhood after lunch. The weath"
+  },
+  {
+    "status": 200,
+    "guess": "ai",
+    "confidence": 0.7632,
+    "model_score": 0.7802,
+    "style_score": 0.7518,
+    "label": "We think this was probably written with help from AI. This is an automated estimate, not proof, and it can be wrong. If you wrote this yourself, you can ask for a person to review it.",
+    "error": null,
+    "elapsed_s": 0.155,
+    "sent": "I have been trying to manage my time better this semester. Writing dow"
+  },
+  {
+    "status": 200,
+    "guess": "unsure",
+    "confidence": 0.5085,
+    "model_score": 0.7255,
+    "style_score": 0.3779,
+    "label": "We can't tell whether this was written by a person or with help from AI. That happens often with clear, simple writing, and it is not a finding against the writer. We aren't marking this as AI.",
+    "error": null,
+    "elapsed_s": 0.131,
+    "sent": "The best part of my morning is having a few quiet minutes before the d"
+  },
+  {
+    "status": 200,
+    "guess": "unsure",
+    "confidence": 0.5414,
+    "model_score": 0.8572,
+    "style_score": 0.4,
+    "label": "We can't tell whether this was written by a person or with help from AI. That happens often with clear, simple writing, and it is not a finding against the writer. We aren't marking this as AI.",
+    "error": null,
+    "elapsed_s": 0.136,
+    "sent": "I visited a friend last weekend, and we talked about school, work, and"
+  },
+  {
+    "status": 200,
+    "guess": "unsure",
+    "confidence": 0.61,
+    "model_score": 0.7526,
+    "style_score": 0.5149,
+    "label": "We can't tell whether this was written by a person or with help from AI. That happens often with clear, simple writing, and it is not a finding against the writer. We aren't marking this as AI.",
+    "error": null,
+    "elapsed_s": 0.139,
+    "sent": "When I started learning to cook, I made many small mistakes. I burned "
+  },
+  {
+    "status": 200,
+    "guess": "unsure",
+    "confidence": 0.6467,
+    "model_score": 0.7167,
+    "style_score": 0.6,
+    "label": "We can't tell whether this was written by a person or with help from AI. That happens often with clear, simple writing, and it is not a finding against the writer. We aren't marking this as AI.",
+    "error": null,
+    "elapsed_s": 0.165,
+    "sent": "I want to spend less time looking at my phone before bed. It is easy t"
+  }
+]
+```
 
+*Criterion 2: score spread* (`app.py::submit`; first 5 are AI, last 5 are mine)
+
+```json
+[
+  {
+    "status": 200,
+    "guess": "ai",
+    "confidence": 0.8784,
+    "model_score": 0.7218,
+    "style_score": 0.9828,
+    "label": "We think this was probably written with help from AI. This is an automated estimate, not proof, and it can be wrong. If you wrote this yourself, you can ask for a person to review it.",
+    "error": null,
+    "elapsed_s": 0.217,
+    "sent": "The implementation of the proposed framework demonstrates significant "
+  },
+  {
+    "status": 200,
+    "guess": "ai",
+    "confidence": 0.7605,
+    "model_score": 0.8939,
+    "style_score": 0.6715,
+    "label": "We think this was probably written with help from AI. This is an automated estimate, not proof, and it can be wrong. If you wrote this yourself, you can ask for a person to review it.",
+    "error": null,
+    "elapsed_s": 0.238,
+    "sent": "Artificial intelligence is transforming the way we live and work. From"
+  },
+  {
+    "status": 200,
+    "guess": "ai",
+    "confidence": 0.8324,
+    "model_score": 0.8877,
+    "style_score": 0.7956,
+    "label": "We think this was probably written with help from AI. This is an automated estimate, not proof, and it can be wrong. If you wrote this yourself, you can ask for a person to review it.",
+    "error": null,
+    "elapsed_s": 0.266,
+    "sent": "Maintaining healthy habits is essential for overall well-being. Regula"
+  },
+  {
+    "status": 200,
+    "guess": "ai",
+    "confidence": 0.762,
+    "model_score": 0.7709,
+    "style_score": 0.7561,
+    "label": "We think this was probably written with help from AI. This is an automated estimate, not proof, and it can be wrong. If you wrote this yourself, you can ask for a person to review it.",
+    "error": null,
+    "elapsed_s": 0.252,
+    "sent": "Remote work has fundamentally reshaped the modern workplace. Employees"
+  },
+  {
+    "status": 200,
+    "guess": "ai",
+    "confidence": 0.8683,
+    "model_score": 0.9089,
+    "style_score": 0.8412,
+    "label": "We think this was probably written with help from AI. This is an automated estimate, not proof, and it can be wrong. If you wrote this yourself, you can ask for a person to review it.",
+    "error": null,
+    "elapsed_s": 0.288,
+    "sent": "Climate change represents one of the most pressing challenges of our t"
+  },
+  {
+    "status": 200,
+    "guess": "unsure",
+    "confidence": 0.5445,
+    "model_score": 0.7096,
+    "style_score": 0.4344,
+    "label": "We can't tell whether this was written by a person or with help from AI. That happens often with clear, simple writing, and it is not a finding against the writer. We aren't marking this as AI.",
+    "error": null,
+    "elapsed_s": 0.102,
+    "sent": "I woke up early today. The house was quiet. I made coffee and checked "
+  },
+  {
+    "status": 200,
+    "guess": "unsure",
+    "confidence": 0.5533,
+    "model_score": 0.812,
+    "style_score": 0.4695,
+    "label": "We can't tell whether this was written by a person or with help from AI. That happens often with clear, simple writing, and it is not a finding against the writer. We aren't marking this as AI.",
+    "error": null,
+    "elapsed_s": 0.152,
+    "sent": "I took the bus to the store. It was crowded, but I found a seat near t"
+  },
+  {
+    "status": 200,
+    "guess": "unsure",
+    "confidence": 0.6912,
+    "model_score": 0.8021,
+    "style_score": 0.6173,
+    "label": "We can't tell whether this was written by a person or with help from AI. That happens often with clear, simple writing, and it is not a finding against the writer. We aren't marking this as AI.",
+    "error": null,
+    "elapsed_s": 0.142,
+    "sent": "Last Saturday, I walked around the neighborhood after lunch. The weath"
+  },
+  {
+    "status": 200,
+    "guess": "ai",
+    "confidence": 0.7632,
+    "model_score": 0.7802,
+    "style_score": 0.7518,
+    "label": "We think this was probably written with help from AI. This is an automated estimate, not proof, and it can be wrong. If you wrote this yourself, you can ask for a person to review it.",
+    "error": null,
+    "elapsed_s": 0.156,
+    "sent": "I have been trying to manage my time better this semester. Writing dow"
+  },
+  {
+    "status": 200,
+    "guess": "unsure",
+    "confidence": 0.5085,
+    "model_score": 0.7255,
+    "style_score": 0.3779,
+    "label": "We can't tell whether this was written by a person or with help from AI. That happens often with clear, simple writing, and it is not a finding against the writer. We aren't marking this as AI.",
+    "error": null,
+    "elapsed_s": 0.159,
+    "sent": "The best part of my morning is having a few quiet minutes before the d"
+  }
+]
+```
+
+*Criterion 3: label coverage* (`app.py::submit`; 3 AI, 3 mine, 3 borderline)
+
+```json
+[
+  {
+    "status": 200,
+    "guess": "ai",
+    "confidence": 0.7707,
+    "model_score": 0.8042,
+    "style_score": 0.7483,
+    "label": "We think this was probably written with help from AI. This is an automated estimate, not proof, and it can be wrong. If you wrote this yourself, you can ask for a person to review it.",
+    "error": null,
+    "elapsed_s": 0.36,
+    "sent": "Effective communication is a cornerstone of successful leadership. Lea"
+  },
+  {
+    "status": 200,
+    "guess": "ai",
+    "confidence": 0.8274,
+    "model_score": 0.8696,
+    "style_score": 0.7993,
+    "label": "We think this was probably written with help from AI. This is an automated estimate, not proof, and it can be wrong. If you wrote this yourself, you can ask for a person to review it.",
+    "error": null,
+    "elapsed_s": 0.231,
+    "sent": "Financial literacy is a critical life skill that empowers individuals "
+  },
+  {
+    "status": 200,
+    "guess": "unsure",
+    "confidence": 0.7405,
+    "model_score": 0.7408,
+    "style_score": 0.7403,
+    "label": "We can't tell whether this was written by a person or with help from AI. That happens often with clear, simple writing, and it is not a finding against the writer. We aren't marking this as AI.",
+    "error": null,
+    "elapsed_s": 0.241,
+    "sent": "Reading offers numerous benefits that extend far beyond entertainment."
+  },
+  {
+    "status": 200,
+    "guess": "unsure",
+    "confidence": 0.5134,
+    "model_score": 0.6836,
+    "style_score": 0.4,
+    "label": "We can't tell whether this was written by a person or with help from AI. That happens often with clear, simple writing, and it is not a finding against the writer. We aren't marking this as AI.",
+    "error": null,
+    "elapsed_s": 0.149,
+    "sent": "My room was messy after a busy week. I washed my clothes and put the b"
+  },
+  {
+    "status": 200,
+    "guess": "unsure",
+    "confidence": 0.5414,
+    "model_score": 0.8572,
+    "style_score": 0.4,
+    "label": "We can't tell whether this was written by a person or with help from AI. That happens often with clear, simple writing, and it is not a finding against the writer. We aren't marking this as AI.",
+    "error": null,
+    "elapsed_s": 0.186,
+    "sent": "I visited a friend last weekend, and we talked about school, work, and"
+  },
+  {
+    "status": 200,
+    "guess": "unsure",
+    "confidence": 0.61,
+    "model_score": 0.7526,
+    "style_score": 0.5149,
+    "label": "We can't tell whether this was written by a person or with help from AI. That happens often with clear, simple writing, and it is not a finding against the writer. We aren't marking this as AI.",
+    "error": null,
+    "elapsed_s": 0.148,
+    "sent": "When I started learning to cook, I made many small mistakes. I burned "
+  },
+  {
+    "status": 200,
+    "guess": "unsure",
+    "confidence": 0.5403,
+    "model_score": 0.5432,
+    "style_score": 0.5383,
+    "label": "We can't tell whether this was written by a person or with help from AI. That happens often with clear, simple writing, and it is not a finding against the writer. We aren't marking this as AI.",
+    "error": null,
+    "elapsed_s": 0.231,
+    "sent": "Remote work has changed a lot about how offices run. People get more f"
+  },
+  {
+    "status": 200,
+    "guess": "unsure",
+    "confidence": 0.4421,
+    "model_score": 0.6522,
+    "style_score": 0.2054,
+    "label": "We can't tell whether this was written by a person or with help from AI. That happens often with clear, simple writing, and it is not a finding against the writer. We aren't marking this as AI.",
+    "error": null,
+    "elapsed_s": 0.261,
+    "sent": "I went to the woods because I wished to live deliberately, to front on"
+  },
+  {
+    "status": 200,
+    "guess": "unsure",
+    "confidence": 0.5349,
+    "model_score": 0.6681,
+    "style_score": 0.4461,
+    "label": "We can't tell whether this was written by a person or with help from AI. That happens often with clear, simple writing, and it is not a finding against the writer. We aren't marking this as AI.",
+    "error": null,
+    "elapsed_s": 0.229,
+    "sent": "Getting enough sleep matters more than most people think. When I start"
+  }
+]
+```
+
+*Criterion 4: appeal path* (`run_eval.py::run_appeals` → `app.py::submit`, `app.py::appeal`, `app.py::get_log`)
+
+```json
+[
+  {
+    "kind": "real",
+    "sent": "The implementation of the proposed framework demonstrates significant ",
+    "submit_status": 200,
+    "content_id": "8cf8dbd1-d13d-4974-8fe0-356f4ef4abff",
+    "appeal_status": 200,
+    "returned_status": "under_review",
+    "log_entry": {
+      "content_id": "8cf8dbd1-d13d-4974-8fe0-356f4ef4abff",
+      "creator_id": "eval_appeal_1",
+      "event": "appeal",
+      "reasoning": "I wrote this for a work report. It is formal because the report is formal.",
+      "status": "under_review",
+      "timestamp": "2026-11-10T03:15:34+00:00"
+    }
+  },
+  {
+    "kind": "real",
+    "sent": "Remote work has changed a lot about how offices run. People get more f",
+    "submit_status": 200,
+    "content_id": "0c8b6a2b-89f3-4acd-a35f-31052e96fee3",
+    "appeal_status": 200,
+    "returned_status": "under_review",
+    "log_entry": {
+      "content_id": "0c8b6a2b-89f3-4acd-a35f-31052e96fee3",
+      "creator_id": "eval_appeal_2",
+      "event": "appeal",
+      "reasoning": "This is my own post about working from home.",
+      "status": "under_review",
+      "timestamp": "2026-11-10T03:15:35+00:00"
+    }
+  },
+  {
+    "kind": "real",
+    "sent": "Getting enough sleep matters more than most people think. When I start",
+    "submit_status": 200,
+    "content_id": "efdd7cfd-b230-4399-b733-0782f2bd9b34",
+    "appeal_status": 200,
+    "returned_status": "under_review",
+    "log_entry": {
+      "content_id": "efdd7cfd-b230-4399-b733-0782f2bd9b34",
+      "creator_id": "eval_appeal_3",
+      "event": "appeal",
+      "reasoning": "I wrote this about my own sleep schedule.",
+      "status": "under_review",
+      "timestamp": "2026-11-10T03:15:35+00:00"
+    }
+  },
+  {
+    "kind": "real",
+    "sent": "I went to the woods because I wished to live deliberately, to front on",
+    "submit_status": 200,
+    "content_id": "c38bb5a5-f7a1-4234-9b92-7d45a8810a0b",
+    "appeal_status": 200,
+    "returned_status": "under_review",
+    "log_entry": {
+      "content_id": "c38bb5a5-f7a1-4234-9b92-7d45a8810a0b",
+      "creator_id": "eval_appeal_4",
+      "event": "appeal",
+      "reasoning": "This is a passage from Walden, quoted for a class essay.",
+      "status": "under_review",
+      "timestamp": "2026-11-10T03:15:35+00:00"
+    }
+  },
+  {
+    "kind": "real",
+    "sent": "Remote work has fundamentally reshaped the modern workplace. Employees",
+    "submit_status": 200,
+    "content_id": "3fff2544-7f13-44c8-ad36-0b5f0b26cb62",
+    "appeal_status": 200,
+    "returned_status": "under_review",
+    "log_entry": {
+      "content_id": "3fff2544-7f13-44c8-ad36-0b5f0b26cb62",
+      "creator_id": "eval_appeal_5",
+      "event": "appeal",
+      "reasoning": "My manager and I drafted this together. No AI was used.",
+      "status": "under_review",
+      "timestamp": "2026-11-10T03:15:36+00:00"
+    }
+  },
+  {
+    "kind": "fake",
+    "content_id": "00000000-0000-0000-0000-000000000000",
+    "appeal_status": 404,
+    "response": {
+      "error": "not_found",
+      "message": "No submission with that content_id."
+    }
+  },
+  {
+    "kind": "fake",
+    "content_id": "not-a-real-content-id",
+    "appeal_status": 404,
+    "response": {
+      "error": "not_found",
+      "message": "No submission with that content_id."
+    }
+  },
+  {
+    "kind": "fake",
+    "content_id": "8fcb7efd-c3c2-431a-808b-85423b7eea6X",
+    "appeal_status": 404,
+    "response": {
+      "error": "not_found",
+      "message": "No submission with that content_id."
+    }
+  }
+]
+```
+
+*Criterion 5: bad input* (`app.py::submit` → `app.py::_refuse`)
+
+```json
+[
+  {
+    "status": 400,
+    "guess": null,
+    "confidence": null,
+    "model_score": null,
+    "style_score": null,
+    "label": null,
+    "error": "invalid_input",
+    "elapsed_s": 0.01,
+    "sent": "(empty text)"
+  },
+  {
+    "status": 400,
+    "guess": null,
+    "confidence": null,
+    "model_score": null,
+    "style_score": null,
+    "label": null,
+    "error": "invalid_input",
+    "elapsed_s": 0.009,
+    "sent": "{\"creator_id\": \"eval_bad_missing\"}"
+  },
+  {
+    "status": 400,
+    "guess": null,
+    "confidence": null,
+    "model_score": null,
+    "style_score": null,
+    "label": null,
+    "error": "invalid_input",
+    "elapsed_s": 0.009,
+    "sent": "{\"text\": null, \"creator_id\": \"eval_bad_null\"}"
+  },
+  {
+    "status": 413,
+    "guess": null,
+    "confidence": null,
+    "model_score": null,
+    "style_score": null,
+    "label": null,
+    "error": "text_too_long",
+    "elapsed_s": 0.011,
+    "sent": "word word word word word word word word word word word word word word "
+  }
+]
 ```
 
 **Diagnoses**
@@ -808,7 +1331,7 @@ that produced it:
        [x] Audit log with all nine fields, recording rejections too
        [x] The attack set run IN FULL, every input with an outcome
        [x] Ten audit log entries pasted as text
-       [ ] Five criteria across three trials
+       [x] Five criteria across three trials
        [ ] A diagnosis for every miss and every broken attack — stage AND mechanism
        [ ] One improvement, with Attack Run — After
        [ ] What's Still Broken, including the production trade

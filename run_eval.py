@@ -25,6 +25,7 @@ import argparse
 import datetime as dt
 import json
 import sys
+import time
 from pathlib import Path
 
 import config
@@ -56,6 +57,49 @@ def bodies_for(scenario):
         {"text": text, "creator_id": f"eval_{scenario['name'][:12]}_{i}"}
         for i, text in enumerate(scenario["texts"], 1)
     ]
+
+
+def run_appeals(scenario, url, timeout, requests):
+    """
+    Criterion 4 (my extension). Sending text can't test the appeal path, so for
+    each pair: submit the text, appeal the content_id that came back, then look
+    in GET /log for an appeal entry with that content_id AND that reasoning.
+    Then appeal each made-up id, which must come back 404.
+    """
+    results = []
+    for i, item in enumerate(scenario["appeals"], 1):
+        row = {"kind": "real", "sent": item["text"][:70]}
+        try:
+            sub = requests.post(f"{url}/submit", timeout=timeout,
+                                json={"text": item["text"], "creator_id": f"eval_appeal_{i}"})
+            row["submit_status"] = sub.status_code
+            content_id = sub.json().get("content_id")
+            row["content_id"] = content_id
+            app_resp = requests.post(f"{url}/appeal", timeout=timeout,
+                                     json={"content_id": content_id, "reasoning": item["reasoning"]})
+            body = app_resp.json()
+            row["appeal_status"] = app_resp.status_code
+            row["returned_status"] = body.get("status")
+            log = requests.get(f"{url}/log", timeout=timeout).json()["entries"]
+            matches = [e for e in log if e.get("event") == "appeal"
+                       and e.get("content_id") == content_id
+                       and e.get("reasoning") == item["reasoning"]]
+            row["log_entry"] = matches[-1] if matches else None
+        except Exception as exc:  # noqa: BLE001
+            row["error"] = f"{type(exc).__name__}: {exc}"
+        results.append(row)
+
+    for fake in scenario.get("fake_ids", []):
+        row = {"kind": "fake", "content_id": fake}
+        try:
+            resp = requests.post(f"{url}/appeal", timeout=timeout,
+                                 json={"content_id": fake, "reasoning": "This is mine."})
+            row["appeal_status"] = resp.status_code
+            row["response"] = resp.json()
+        except Exception as exc:  # noqa: BLE001
+            row["error"] = f"{type(exc).__name__}: {exc}"
+        results.append(row)
+    return results
 
 
 def describe(body):
@@ -112,12 +156,20 @@ def main():
 
         trials = []
         for trial in range(1, args.trials + 1):
+            if scenario.get("appeals"):
+                results = run_appeals(scenario, args.url, args.timeout, requests)
+                trials.append(results)
+                summary = [str(r.get("appeal_status")) for r in results]
+                print(f"  trial {trial}: {', '.join(summary)}")
+                continue
             results = []
             for i, body in enumerate(bodies_for(scenario), 1):
                 preview = describe(body)
+                started = time.perf_counter()
                 try:
                     response = requests.post(f"{args.url}/submit", json=body,
                                              timeout=args.timeout)
+                    elapsed = round(time.perf_counter() - started, 3)
                     payload = response.json() if response.content else {}
                     results.append({
                         "status": response.status_code,
@@ -126,10 +178,13 @@ def main():
                         "model_score": payload.get("model_score"),
                         "style_score": payload.get("style_score"),
                         "label": payload.get("label"),
+                        "error": payload.get("error"),
+                        "elapsed_s": elapsed,
                         "sent": preview,
                     })
                 except Exception as exc:  # noqa: BLE001
                     results.append({"status": None, "error": f"{type(exc).__name__}: {exc}",
+                                    "elapsed_s": round(time.perf_counter() - started, 3),
                                     "sent": preview})
 
             trials.append(results)

@@ -153,7 +153,7 @@ def health():
 # ── YOU BUILD THIS ────────────────────────────────────────────────────────────
 
 @app.post("/submit")
-# @limiter.limit(f"{config.RATE_LIMIT_PER_MINUTE}/minute;{config.RATE_LIMIT_PER_DAY}/day")
+@limiter.limit(f"{config.RATE_LIMIT_PER_MINUTE}/minute;{config.RATE_LIMIT_PER_DAY}/day")
 def submit():
     """
     Take a piece of text, decide about it, log the decision, answer.
@@ -204,31 +204,32 @@ def submit():
 
     payload = request.get_json(silent=True)
     if not isinstance(payload, dict):
-        return _bad_input("Send a JSON object with 'text' and 'creator_id'.")
+        return _refuse(None, None, 400, "invalid_input",
+                       "Send a JSON object with 'text' and 'creator_id'.")
 
     text = payload.get("text")
     creator_id = payload.get("creator_id")
 
     # Refuse bad input before the model runs — see criteria.md #5.
+    # Every refusal is logged: an attack that shows up only as an absence is
+    # one you'll never find.
     if not isinstance(text, str) or not text.strip():
-        return _bad_input("'text' is required and must be a non-empty string.")
+        return _refuse(creator_id, text, 400, "invalid_input",
+                       "'text' is required and must be a non-empty string.")
     if not isinstance(creator_id, str) or not creator_id.strip():
-        return _bad_input("'creator_id' is required and must be a non-empty string.")
+        return _refuse(creator_id, text, 400, "invalid_input",
+                       "'creator_id' is required and must be a non-empty string.")
     if len(text) > config.MAX_TEXT_CHARS:
-        return jsonify({
-            "error": "text_too_long",
-            "message": f"Text must be {config.MAX_TEXT_CHARS:,} characters or fewer.",
-        }), 413
+        return _refuse(creator_id, text, 413, "text_too_long",
+                       f"Text must be {config.MAX_TEXT_CHARS:,} characters or fewer.")
 
     try:
         model_score = detector.model_signal(text)
     except ValueError:
-        return jsonify({
-            "error": "text_too_short",
-            "message": "Submit at least a few sentences.",
-        }), 422
+        return _refuse(creator_id, text, 422, "text_too_short",
+                       "Submit at least a few sentences.")
     except detector.DetectorUnavailable as exc:
-        return jsonify({"error": "detector_unavailable", "message": str(exc)}), 503
+        return _refuse(creator_id, text, 503, "detector_unavailable", str(exc))
 
     style_score = stylometry.style_signal(text)
     confidence = scoring.combine_signals(model_score, style_score)
@@ -259,6 +260,23 @@ def submit():
 
 def _bad_input(message: str):
     return jsonify({"error": "invalid_input", "message": message}), 400
+
+
+def _refuse(creator_id, text, http_status: int, error: str, message: str):
+    """
+    Refuse a /submit request AND leave a trace of it in the audit log.
+
+    The text itself isn't logged (it may be private and it may be huge), only
+    its length, which is enough to tell "empty" from "10 MB flood".
+    """
+    audit.log_rejection(
+        creator_id=creator_id if isinstance(creator_id, str) and creator_id.strip() else "unknown",
+        reason=error,
+        http_status=http_status,
+        message=message,
+        text_chars=len(text) if isinstance(text, str) else None,
+    )
+    return jsonify({"error": error, "message": message}), http_status
 
 
 @app.post("/appeal")

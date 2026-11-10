@@ -511,24 +511,60 @@ running commands and editing files at my request, milestone by milestone.
 
 ## Rate Limiting
 
-**My limits:** ___ per minute, ___ per day
+**My limits:** 5 per minute, 50 per day (`config.py`: `RATE_LIMIT_PER_MINUTE`,
+`RATE_LIMIT_PER_DAY`, applied to `/submit` by `@limiter.limit(...)` in `app.py`)
 
 **Why those numbers and not others:**
-<!-- Think about two people: a real writer submitting their own work a few
-     times an hour, and a script sending a thousand variations to map your
-     thresholds. Your numbers have to be liveable for the first and hostile to
-     the second. -->
 
-**What a caller counts as:** <!-- per address, or per creator_id? They fail
-differently — one script can look like a thousand callers, and one household
-can look like one. -->
+- **A real writer.** Someone checking their own work submits a draft, reads the
+  label, edits, and submits again. That loop takes longer than 12 seconds, so 5
+  a minute still lets through a quick burst of revisions. 50 a day works out to
+  one check every ~20 minutes across a long writing day, which is more than a
+  person checking their own drafts will use.
+- **A script mapping my thresholds.** A script sending 1,000 variations to find
+  where "unsure" turns into "AI" hits the wall on its 6th request. At 50 a day
+  it needs 20 days per identity to finish, instead of a few minutes with no
+  limit, or 5 days at the starter's 200 a day.
+- I went lower than the starter's 10/minute and 200/day because the per-day
+  number is the one that actually slows a threshold-mapping script, and 200 was
+  far more than any honest writer needs.
+
+**What a caller counts as:** per `creator_id`, falling back to the caller's IP
+address when no `creator_id` is sent (`app.py::rate_limit_key`). This fails in
+a specific way: `creator_id` is chosen by the caller, so a script that sends a
+new `creator_id` on every request gets a fresh allowance each time. Per-IP
+limits fail the other way: one script behind many addresses looks like many
+callers, and a household or classroom sharing one address looks like one. The
+limit only really stops a caller that keeps one identity. Closing that gap
+needs server-issued creator IDs, or limiting on IP as well.
 
 **The run of status codes when I pushed past it:**
 
 <!-- python run_attacks.py --flood 15 -->
 
 ```
+$ python run_attacks.py --flood 15
+15 submissions as 'flood_tester' against http://127.0.0.1:5000
 
+200 200 200 200 200 429 429 429 429 429 429 429 429 429 429
+
+10 of 15 were rate limited.
+```
+
+**The rejections left a trace.** The 6th and 7th requests in the audit log
+(`logs/audit.jsonl`), right after the 5th one that was accepted:
+
+```json
+{"timestamp": "2026-11-10T01:26:03+00:00", "content_id": "9faf6e9f-467b-4611-88c7-f18397bd5234", "creator_id": "flood_tester", "guess": "human", "model_score": 0.2587, "style_score": 0.2774, "combined_score": 0.2699, "label": "We think this was probably written by a person. Our automated check found the patterns we usually see in human writing.", "status": "decided"}
+{"timestamp": "2026-11-10T01:26:03+00:00", "creator_id": "flood_tester", "event": "rejected", "status": "rejected", "reason": "rate_limited", "limit": "5 per 1 minute"}
+{"timestamp": "2026-11-10T01:26:03+00:00", "creator_id": "flood_tester", "event": "rejected", "status": "rejected", "reason": "rate_limited", "limit": "5 per 1 minute"}
+```
+
+Requests my own route refuses are logged too (`app.py::_refuse`). A request
+with no text:
+
+```json
+{"creator_id": "log_check_bad", "event": "rejected", "status": "rejected", "reason": "invalid_input", "http_status": 400, "message": "'text' is required and must be a non-empty string.", "text_chars": null, "timestamp": "2026-11-10T01:26:12+00:00"}
 ```
 
 ---
@@ -647,9 +683,9 @@ that produced it:
 
      SUBMISSION CHECKLIST — unit 8
 
-       [ ] Rate limiting on /submit, with your numbers justified
-       [ ] The pasted run of status codes showing 429
-       [ ] Audit log with all nine fields, recording rejections too
+       [x] Rate limiting on /submit, with your numbers justified
+       [x] The pasted run of status codes showing 429
+       [x] Audit log with all nine fields, recording rejections too
        [ ] The attack set run IN FULL, every input with an outcome
        [ ] Ten audit log entries pasted as text
        [ ] Five criteria across three trials

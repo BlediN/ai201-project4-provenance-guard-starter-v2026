@@ -505,6 +505,51 @@ running commands and editing files at my request, milestone by milestone.
   0.3, and the AI threshold raised to 0.75. Without that, she would still have
   scored 0.696 and been accused.
 
+**Unit 8**
+
+I kept using Claude Code the same way: it ran the service, the attack set and
+the eval, and edited files when I asked.
+
+**Moment 3: the false-positive test needed my writing, not the AI's**
+
+- *What I asked for:* Fill in `scenarios.py` for all five criteria and run the
+  eval.
+- *What came back:* The AI texts, borderline texts, appeal and bad-input
+  scenarios, plus an extension to `run_eval.py` (`run_appeals`) so criterion 4
+  could be tested automatically. It refused to write criterion 1's texts: text
+  an AI writes is AI text, which would make a false-positive test
+  meaningless. It left the slots as placeholders the validator wouldn't run
+  past.
+- *What I did:* I wrote the ten pieces myself, four of them deliberately plain.
+  The AI-written texts are labelled as AI-generated in `scenarios.py`, so
+  it's clear which inputs are mine.
+
+**Moment 4: the diagnosis came from the numbers, not the attack labels**
+
+- *What I asked for:* A stage and a mechanism for every miss and every broken
+  attack.
+- *What came back:* A printout of every sub-measure for each failing input,
+  and a sweep of my combining rule over every pair of scores. That sweep
+  showed that the human label needs `model_score` ≤ 0.525, and that a firing
+  pull traps the score between 0.311 and 0.69. It also showed that the attack
+  set's own `targets` column was wrong for EV01: typos were aimed at signal
+  two but actually crushed signal one (perplexity 124.8).
+- *What I did:* I used that one pattern, "register, not authorship", to pick
+  the improvement, instead of patching attacks one at a time.
+
+**Moment 5: choosing the one change, and reporting what it broke**
+
+- *What I asked for:* Fix one thing and re-run.
+- *What came back:* Five candidate changes scored offline before any code
+  changed. The reweight inside signal two was the only one that moved both
+  missed criteria. The model/style reweights barely moved anything.
+- *What I did:* I made that one change, re-ran both sets, and reported the
+  regressions it caused (MF03 and MF04 now labelled human, FP04 slightly
+  worse) instead of slipping in a second fix. I also noted that the option
+  was chosen on the same texts it was tested on, so the "after" numbers are
+  optimistic.
+
+
 <!-- ═══════════════════════ UNIT 8 — THE TEST ═══════════════════════ -->
 
 ---
@@ -1560,14 +1605,91 @@ It helped on what I aimed it at, and it created a new problem.
 <!-- For each attack still getting through and each criterion still missed:
      what you'd do, and why you stopped. -->
 
+After the improvement, 12 of 56 attacks still break and criterion 3 is still
+missed. Grouped by the stage that fails:
 
+**Criterion 3: the "human" label is unreachable for plain writing.**
+
+- **What I'd do:** replace or recalibrate signal one. The human label needs
+  `model_score` ≤ 0.525, which means gpt2 perplexity above about 42, and my
+  own writing sits at 14.7–27.8. Moving the midpoint in
+  `detector.py::model_signal` from 45 down to about 25 would let some of my
+  pieces through. But AI text sits at perplexity 10.7–24.8, so that would
+  also push AI text toward "human". The real fix is a signal that measures
+  something other than predictability, such as comparing the text against a
+  model's own rewrite of it.
+- **Why I stopped:** the milestone allows one change, and I spent it on
+  signal two, where the diagnosis said the most damage was. A new signal one
+  is a rebuild, not a tweak.
+
+**FP02 and FP04: formal and rubric writers are still accused (0.778, 0.847).**
+
+- **What I'd do:** stop treating long words as evidence. Formal, academic
+  and rubric writing uses long words because the register asks for it. Every
+  measure I have rewards plain writing and punishes formal writing, so the
+  fix is a signal that isn't about register at all (the same rebuild as
+  above). Until then, a cheap guard is to require *both* signals to clear
+  0.8 before anything is labelled AI.
+- **Why I stopped:** my improvement made FP04 slightly worse (0.836 → 0.847)
+  by weighting word length more. I'm reporting that rather than adding a
+  second change to cover it.
+
+**EV01, EV04, EV08: one fooled signal defeats the combining rule.**
+
+- **What I'd do:** when the signals split, look at *which* one is low. A
+  model score crushed by misspellings (EV01, perplexity 124.8) or by too
+  little text (EV08, 10 words) isn't evidence of a human writer; it's
+  missing evidence. I'd refuse to score texts under about 50 words (that
+  fixes EV08), and let a very high style score keep a split text out of the
+  "human" side of unsure rather than pulling it to 0.5.
+- **Why I stopped:** the disagreement pull is also what protects plain
+  writers like my "I moved to this city" paragraph. Weakening it brings back
+  the false positive I built the rule to prevent, and I didn't have a test
+  set to prove a narrower rule was safe.
+
+**EV02, EV06, EV07: surface edits to signal two (now about 0.71, under 0.75).**
+
+- **What I'd do:** nothing more inside signal two. They moved from about
+  0.58 to about 0.71 after the improvement. The remaining gap comes from
+  perplexity rising on the odd rhythm, so signal one is the lever.
+- **Why I stopped:** catching them by lowering the AI threshold back toward
+  0.65 would re-expose my plain writing. My highest piece is 0.671 now.
+
+**EV05: heavy human editing (labelled human, 0.311).**
+
+- **What I'd do:** nothing. After that much editing the measurable text is
+  the human's. I'd note it in the label policy rather than chase it.
+
+**MF03, MF04, MF05: junk input gets a confident label** (human 0.120, human
+0.185, AI 0.939).
+
+- **What I'd do:** validate at the route before either signal runs. Require
+  a minimum number of real words (letters only), no "word" longer than about
+  30 letters, and mostly printable characters, otherwise return a 422. That
+  fixes all three at once and is the cheapest fix on this list.
+- **Why I stopped:** it's a second change. I had already used my one on
+  signal two, and the MF03 and MF04 breaks only appeared *because* of that
+  change. This is the next commit I'd make.
+
+**The rate limit counts per `creator_id`.**
+
+- **What I'd do:** a script that sends a new `creator_id` on every request
+  is never limited. I'd add a second, per-IP limit alongside it, or issue
+  creator IDs from the server.
+- **Why I stopped:** it was outside this unit's milestones.
 
 **The trade I'd make if this ran for real:**
 
 <!-- Two sentences. Fewer wrong accusations means more AI text getting through.
      Say which way you'd go and WHO PAYS FOR IT. -->
 
-
+I'd keep erring toward fewer wrong accusations, as this build already does
+with the 0.75 AI line and the disagreement pull. A writer wrongly labelled AI
+has no way to prove they weren't, while a missed AI text costs the site a
+little credibility. The people who pay are the honest writers competing on
+the same site with someone whose lightly edited AI text was called "unsure".
+So do the readers, who trust a label that misses most of the evasions in my
+attack set (7 of 10 still got through).
 
 <!-- ═════════════════════════════════════════════════════════════════════
 
@@ -1595,9 +1717,9 @@ It helped on what I aimed it at, and it created a new problem.
        [x] Five criteria across three trials
        [x] A diagnosis for every miss and every broken attack — stage AND mechanism
        [x] One improvement, with Attack Run — After
-       [ ] What's Still Broken, including the production trade
-       [ ] At least four new commits
-       [ ] The SAME repository URL as last unit
+       [x] What's Still Broken, including the production trade
+       [x] At least four new commits
+       [x] The SAME repository URL as last unit
 
      Do not delete and recreate this repository.
      ═════════════════════════════════════════════════════════════════════ -->

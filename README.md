@@ -1256,20 +1256,175 @@ nothing drifts rather than averaging out noise.
 **Diagnoses**
 
 <!-- For each miss AND each broken attack: the stage and the mechanism.
+     Five stages: the route, signal one, signal two, the combining rule, and
+     the label mapping. -->
 
-     Your service has five stages: the route, signal one, signal two, the
-     combining rule, and the label mapping.
+**Verdicts:** criteria 1, 4 and 5 were MET in all three trials. Criteria 2 and
+3 were MISSED in all three. The attack run broke 12 of 56: 9 evasion, 2 false
+positive, 1 malformed. The three trials gave identical scores (gpt2 scoring has
+no sampling), so a miss here is a miss every time, not bad luck.
 
-     Not a diagnosis:  "The evasion attacks got through."
-     A diagnosis:      "Four evasion inputs got through. All four had typos
-                        added to AI-generated text. My second signal measures
-                        word variety, and typos raise word variety — so it read
-                        them as more human. My combining rule weights that
-                        signal at 0.6, so it dragged the whole score down."
+To diagnose these I printed every sub-measure for each failing input:
+perplexity, `model_score`, and the three parts of `style_score` (sentence
+spread, mean word length, punctuation density, each on its own 0 = human to
+1 = AI scale). The numbers below come from that.
 
-     Look for a pattern. Five failures on one signal is one problem, not five. -->
+### The pattern: my service measures register, not authorship
 
+Most of the failures come from one problem, which shows up at three stages.
 
+**1. Signal one can't separate my writing from AI text.** My ten pieces have
+perplexity 14.7–27.8, giving `model_score` 0.684–0.857. My eight AI texts have
+perplexity 10.7–24.8, giving 0.722–0.909. The ranges overlap almost completely.
+Short sentences made of common words are as predictable to gpt2 as AI prose,
+so a signal weighted at 0.4 adds almost nothing to the separation.
+
+**2. Two of signal two's three measures share signal one's blind spot.** My
+plain pieces are three even sentences with few commas. Sentence spread scored
+six of my ten pieces at the maximum AI value (1.00). Punctuation density scored
+four of them at 1.00, because pieces 1, 3, 7 and 10 have no commas at all.
+Only mean word length points the right way: 0.00–0.44 for my pieces, 1.00 for
+every AI text. So signal two is really one working measure (40% of it) and two
+measures that also read "plain and even" as AI.
+
+**3. The combining rule only protects writers when the signals disagree.** The
+disagreement pull is my safety net, and it fires only when the two signals are
+more than 0.3 apart. When both signals make the same mistake, they agree, the
+net never fires, and the score goes straight through to the label.
+
+### Criterion 2 MISSED (gap 0.208, target 0.25)
+
+- **Stage:** signal one, plus two of signal two's three measures.
+- **Mechanism:** AI mean 0.820, my mean 0.612. Signal one gives nearly the same
+  score to both groups (above), so it pulls the two means together. Within
+  signal two, only word length separates them; spread and punctuation call my
+  writing AI. The pull also nudges my lowest pieces *up* toward 0.5. For
+  example, piece 7 would be 0.517 as a straight weighted average and is pulled
+  to 0.508. Here that barely matters; the overlap in signal one is most of it.
+
+### Criterion 3 MISSED (the "human" label never appears)
+
+- **Stage:** the combining rule and the label mapping, together, fed by signal one.
+- **Mechanism:** I checked my rule over every pair of scores from 0 to 1.
+  **"Human" (0.35 or below) is reachable only when `model_score` ≤ 0.525.** That
+  means gpt2 perplexity above about 42. My own writing never got above 27.8.
+  - Without the pull, a low style score can't outweigh a high model score:
+    piece 1 gets 0.4 × 0.710 + 0.6 × 0.434 = 0.544.
+  - With the pull, the score is dragged toward 0.5, away from 0.35. **Whenever
+    the pull fires, the result is trapped between 0.311 and 0.69, so neither
+    confident label can be reached at all.**
+  - The human label was reachable on paper and unreachable for the plain,
+    everyday writing it exists to protect. The second half of the criterion
+    held: 2 of 3 AI texts were labelled AI.
+
+### Criterion 1 MET, with no margin
+
+My piece 6 ("I have been trying to manage my time better this semester…")
+scored 0.763 against an AI line of 0.75. It's the pattern exactly:
+
+- model 0.780 (perplexity 20.4)
+- sentence spread at maximum AI (1.00)
+- punctuation 0.88
+- word length 0.44, the only measure that read it as human
+
+Style 0.752 and model 0.780 *agree*, so the pull didn't fire and nothing
+stopped it. A second piece like it would fail the target.
+
+### Broken attacks
+
+**FP02 (formal register, 0.817) and FP04 (rubric essay, 0.836) were accused.**
+
+- **Stage:** signal two's word-length measure, signal one, and the combining
+  rule's agreement.
+- **Mechanism:** the mirror image of my plain writing.
+  - Formal and rubric prose uses long words (5.18 and 5.40 letters on average),
+    so word length, the measure I added to *rescue* plain writers, scores them
+    0.74 and 0.87.
+  - They use almost no punctuation (1.00 on that measure), and gpt2 finds them
+    predictable (0.739 and 0.833).
+  - Every measure agrees, the pull stays off, and both clear 0.75.
+- Plain writers are rescued by short words, and formal writers are convicted
+  by long ones. Both outcomes are about register.
+
+**Evasion: one fooled signal is enough (EV01, EV04, EV08).**
+
+- **Stage:** the combining rule.
+- **Mechanism:** the AI label needs *both* signals high, at least 0.575 model
+  and 0.635 style, and within 0.3 of each other. An attacker only has to knock
+  one signal 0.3 away from the other: the pull fires, and the AI label is
+  arithmetically out of reach.
+  - **EV01 (typos):** the target column says it was aimed at signal two, but it
+    actually hit signal one. Misspellings are rare tokens to gpt2, perplexity
+    jumped to 124.8, and `model_score` fell to 0.164. Signal two still said
+    0.969 (AI), but with signal one at 0.164 the most the combined score can
+    reach is 0.666.
+  - **EV04 (unusual words):** model 0.611 against style 0.970. The weighted
+    average was 0.826, which would have been labelled AI, and the pull
+    dragged it to 0.663.
+  - **EV08 (10 words):** too short for gpt2 to settle (perplexity 90.9, model
+    0.245). Style 0.895 couldn't carry it.
+
+**Evasion: surface features fool signal two (EV02, EV06, EV07).**
+
+- **Stage:** signal two.
+- **Mechanism:** sentence spread and punctuation density are 60% of signal two,
+  and both can be edited without changing a word of the AI prose.
+  - **EV02 (broken-up sentences, spread 0.85) and EV06 (one very long and one
+    very short sentence, spread 1.19):** both took the spread measure to 0.00,
+    fully human.
+  - **EV07 (punctuation padding, density 0.216):** took punctuation to 0.00. It
+    also became a single "sentence", so spread fell back to the neutral 0.5.
+  - In all three, word length stayed at 1.00 (AI), but at 40% of signal two it
+    couldn't carry the score. Style landed at 0.57–0.60 and model at 0.57–0.59,
+    because perplexity rose to 35–37 on the odd rhythm.
+
+**Evasion: the AI threshold I raised (EV03 0.714, EV09 0.745).**
+
+- **Stage:** the label mapping.
+- **Mechanism:** both signals agree and point at AI (0.67–0.77), but the
+  combined score falls short of 0.75.
+  - I raised the AI line from 0.65 to 0.75 in Milestone 5 to protect plain
+    writers. That opened a 0.65–0.75 band where lightly altered AI text lands
+    as "unsure".
+  - Unaltered AI text isn't safely above the line either: my AI text 8 scored
+    0.741 in the eval, and texts 2 and 4 cleared it by about 0.01.
+  - This is the trade I chose on purpose, and here is what it costs.
+
+**EV05 (heavy human editing → labelled human, 0.319).**
+
+- **Stage:** both signals.
+- **Mechanism:** the edit really did change the measured properties.
+  Perplexity rose to 71.8 and average word length fell to 4.46. Both signals
+  agree it reads as human.
+- I mark it broke because the attack got where it was going. I don't think any
+  text-only detector should catch this one: past a certain amount of editing,
+  the text *is* the human's writing.
+
+**MF05 (one 4,000-character "word" → labelled AI, 0.879).**
+
+- **Stage:** the route.
+- **Mechanism:** `app.py::submit` checks the text is a non-empty string under
+  10,000 characters, never that it's prose. On a run of repeated characters
+  both signals saturate:
+  - gpt2 perplexity is 1.0, so model 0.998.
+  - Word length is 4,000 letters, clamped to 1.00. There's no punctuation
+    (1.00) and only one sentence (spread neutral 0.5), so style is 0.80.
+- The fix belongs at the route: refuse text with too few real words, or with a
+  "word" longer than any real word. Nothing downstream should ever see it.
+
+### Criteria I'm not revising
+
+All five criteria were measurable: each gave a number I could check against
+its target in every trial, so none of them is broken. Criteria 2 and 3 stay
+exactly as written and count as misses.
+
+Criteria 4 and 5 passed easily (every bad request answered in 0.012 s or less,
+all 8 appeals behaved). If I tightened one, it would be **criterion 5**. It
+covers only four obviously malformed bodies, and MF05 showed that the input
+the route actually lets through, text that is technically valid but isn't
+writing, is the real gap. A tighter version would require a 4xx for
+degenerate text too: one repeated "word", control characters only, or
+punctuation only.
 
 ---
 
@@ -1332,7 +1487,7 @@ nothing drifts rather than averaging out noise.
        [x] The attack set run IN FULL, every input with an outcome
        [x] Ten audit log entries pasted as text
        [x] Five criteria across three trials
-       [ ] A diagnosis for every miss and every broken attack — stage AND mechanism
+       [x] A diagnosis for every miss and every broken attack — stage AND mechanism
        [ ] One improvement, with Attack Run — After
        [ ] What's Still Broken, including the production trade
        [ ] At least four new commits

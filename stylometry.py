@@ -175,10 +175,17 @@ def style_signal(text: str) -> float:
     between an AI-typical and a human-typical value (taken from my
     calibration texts), clamped at the ends, then weighted:
 
-        sentence spread     0.4    0.20 → 1.0 (AI)    0.80 → 0.0 (human)
-        mean word length    0.4    5.6  → 1.0         4.0  → 0.0
-        punctuation         0.2    0.02 → 1.0         0.12 → 0.0
+        sentence spread     0.2    0.20 → 1.0 (AI)    0.80 → 0.0 (human)
+        mean word length    0.7    5.6  → 1.0         4.0  → 0.0
+        punctuation         0.1    0.02 → 1.0         0.12 → 0.0
         type-token ratio    0.0    computed and printed, not scored
+
+    Unit 8 improvement: the weights were 0.4 / 0.4 / 0.2. My diagnosis found
+    that sentence spread and punctuation read plain, even human writing as AI
+    (the same blind spot as signal one) and are trivially edited by an
+    evader, while word length was the only measure that separated my own
+    writing (0.00–0.44) from every AI text (1.00). So word length now carries
+    most of the signal.
 
     Type-token ratio gets no weight: on my calibration set it rated Thoreau
     the most AI-like text and lightly edited AI the most human. With fewer than
@@ -192,7 +199,7 @@ def style_signal(text: str) -> float:
     length_ai = _scale(mean_word_length(text), ai=5.6, human=4.0)
     punct_ai = _scale(punctuation_density(text), ai=0.02, human=0.12)
 
-    score = 0.4 * spread_ai + 0.4 * length_ai + 0.2 * punct_ai
+    score = 0.2 * spread_ai + 0.7 * length_ai + 0.1 * punct_ai
     return round(score, 4)
 
 

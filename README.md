@@ -1430,22 +1430,128 @@ punctuation only.
 
 ## The Improvement
 
-**What I changed:**
+**What I changed:** one line in `stylometry.py::style_signal`, which reweights
+the three measures inside signal two:
 
-**Which diagnosis pointed at it:**
+| Measure | Before | After |
+|---|---|---|
+| sentence spread | 0.4 | **0.2** |
+| mean word length | 0.4 | **0.7** |
+| punctuation density | 0.2 | **0.1** |
+
+```python
+# before
+score = 0.4 * spread_ai + 0.4 * length_ai + 0.2 * punct_ai
+# after
+score = 0.2 * spread_ai + 0.7 * length_ai + 0.1 * punct_ai
+```
+
+Nothing else changed. The model/style weights (0.4 / 0.6), the disagreement
+pull, both thresholds and the route are all as they were.
+
+**Which diagnosis pointed at it:** the pattern in my Diagnoses. Sentence spread
+and punctuation density shared signal one's blind spot: they scored my plain,
+even, comma-free writing as AI. They were also the two measures EV02, EV06 and
+EV07 beat by reshaping sentences and padding punctuation. Word length was the
+only measure that separated my writing (0.00–0.44) from every AI text (1.00),
+so it now carries most of signal two.
+
+**How I picked the numbers:** before changing the code, I recomputed the
+scores offline for five options on the same inputs: this weighting, a 0.3 /
+0.6 / 0.1 version, and two model/style reweights (0.2 / 0.8 and 0.25 / 0.75).
+The model/style reweights barely moved anything (criterion 2 gap 0.229–0.236,
+still 1 of my pieces labelled AI), because the problem was *inside* signal two,
+not in how much it counts. This one was the clear best. That also means I chose
+it on the same texts I then tested on, so these "after" numbers are
+optimistic. A fresh set of my own writing is the honest next check.
+
+### Run Log — before and after
+
+Same command, same `scenarios.py`, three trials each.
+Before: `results/run_2026-11-09_2215_before.md`.
+After: `results/run_2026-11-09_2226_after.md`.
+Both produced by `run_eval.py::main`.
+
+| Criterion | Target | Before (×3) | Verdict | After (×3) | Verdict |
+|---|---|---|---|---|---|
+| 1. My own writing flagged as AI | ≤ 1 of 10 | 1/10, 1/10, 1/10 | MET (piece 6 at 0.763) | 0/10, 0/10, 0/10 | **MET** (highest 0.671) |
+| 2. Score spread | gap ≥ 0.25 | 0.208, 0.208, 0.208 | MISSED | 0.354, 0.354, 0.354 | **MET** |
+| 3. All three labels, AI still caught | 3/3 labels, ≥ 2/3 AI | 2/3 labels, 2/3 AI (×3) | MISSED | 2/3 labels, 3/3 AI (×3) | **MISSED** |
+| 4. Appeal path | 5/5 + 3/3 | 5/5, 3/3 (×3) | MET | 5/5, 3/3 (×3) | MET |
+| 5. Bad input | 4/4, < 2 s | 4/4, max 0.012 s | MET | 4/4, max 0.023 s | MET |
+
+**Criterion 2:** AI mean rose 0.820 → 0.878, and my mean fell 0.612 → 0.523.
+
+**Criterion 3, after:** "human" still never appears. My lowest piece is now
+0.411, but the 0.35 line is still out of reach. This is exactly what the
+diagnosis predicted. With my writing at `model_score` 0.68–0.86, the human
+label needs a model score of 0.525 or less, and a signal-two change can't fix
+signal one.
 
 ### Attack Run — After
 
-<!-- Same format. `run_attacks.py --label after` -->
+`python run_attacks.py --set attack_set --label after`, written to
+`results/attack_run_2026-11-09_2226_after.md`. I marked verdicts by the same
+rules as the before run.
 
+| Family | Before: held / broke | After: held / broke |
+|---|---|---|
+| evasion | 1 / 9 | **3 / 7** |
+| false_positive | 6 / 2 | 6 / 2 |
+| prompt_injection | 6 / 0 | 6 / 0 |
+| malformed | 19 / 1 | **17 / 3** |
+| flood_same_creator | 12 / 0 | 12 / 0 |
+| **Total** | **44 / 12** | **44 / 12** |
 
+Every attack whose label changed, plus the two still-accused writers:
+
+| ID | Targeting | Before | After | Verdict change |
+|---|---|---|---|---|
+| EV03 | pasted quotation | unsure 0.714 | **ai 0.790** | BROKE → HELD |
+| EV09 | human opening on AI text | unsure 0.745 | **ai 0.813** | BROKE → HELD |
+| EV02 | broken-up sentences | unsure 0.582 | unsure 0.710 | still BROKE, closer |
+| EV06 | one long, one short sentence | unsure 0.574 | unsure 0.702 | still BROKE, closer |
+| EV07 | punctuation padding | unsure 0.595 | unsure 0.715 | still BROKE, closer |
+| FP08 | very short human text | unsure 0.396 | **human 0.262** | HELD → HELD (first real "human" label) |
+| FP02 | formal human register | ai 0.817 | ai 0.778 | still BROKE |
+| FP04 | student essay to a rubric | ai 0.836 | ai 0.847 | still BROKE |
+| MF03 | control characters | unsure 0.370 | **human 0.120** | HELD → **BROKE** |
+| MF04 | punctuation only | unsure 0.432 | **human 0.185** | HELD → **BROKE** |
+
+RQ10 and RQ11 again got 429, because they counted against my own address. The
+route didn't change, and their recheck in the before run returned 400, so
+they're marked held as before.
 
 **Did it help, and how do I know:**
 
-<!-- Widening the unsure band usually fixes one problem and creates another.
-     Reporting that trade honestly is worth full credit. -->
+It helped on what I aimed it at, and it created a new problem.
 
-
+- **Helped:**
+  - Criterion 2 went from MISSED to MET (gap 0.208 → 0.354, all three trials).
+  - Criterion 1 went from MET-by-0.013 to MET with a real margin: my highest
+    piece fell from 0.763 to 0.671, 0.08 under the AI line.
+  - Two evasions are now caught (EV03, EV09), and the three surface-feature
+    evasions moved from about 0.58 to about 0.71.
+  - All three AI texts in criterion 3 are now caught, up from two.
+  - The human label appeared for the first time, on FP08.
+- **Didn't help:**
+  - Criterion 3 is still MISSED. The diagnosis said signal one is what blocks
+    the human label, and this change didn't touch signal one.
+  - FP02 and FP04 are still accused. FP04 actually rose, 0.836 → 0.847. Long
+    words are what convict formal and rubric writers, and I just gave long
+    words *more* weight. The writers I'd least want to explain this to are no
+    better off.
+  - EV01, EV04 and EV08 are unchanged. They win at the combining rule, by
+    pushing one signal 0.3 away from the other, and nothing in signal two can
+    fix that.
+- **Created a new problem:** MF03 (control characters) and MF04 (punctuation
+  only) are now confidently labelled **human**. With word length at 0.7, any
+  text made of short tokens reads as human, even when it isn't writing. No
+  writer is harmed by this, but it means an attacker can lower a score by
+  padding text with short junk tokens. And the overall count stayed at 44 held
+  / 12 broke: I traded two evasion wins for two malformed losses. The real fix
+  for those is the route check from the MF05 diagnosis, which is a separate
+  change.
 
 ---
 
@@ -1488,7 +1594,7 @@ punctuation only.
        [x] Ten audit log entries pasted as text
        [x] Five criteria across three trials
        [x] A diagnosis for every miss and every broken attack — stage AND mechanism
-       [ ] One improvement, with Attack Run — After
+       [x] One improvement, with Attack Run — After
        [ ] What's Still Broken, including the production trade
        [ ] At least four new commits
        [ ] The SAME repository URL as last unit
